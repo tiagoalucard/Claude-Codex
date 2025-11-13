@@ -5,13 +5,14 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
       "env": {
-        "WORKING_DIR": ".claude"
+        "WORKING_DIR": ".claude",
+        "OPENAI_API_KEY": "your-openai-api-key-here"
       }
     },
     "codex": {
       "type": "stdio",
-      "command": "codex",
-      "args": ["mcp-server"],
+      "command": "npx",
+      "args": ["-y", "@openai/codex", "mcp-server"],
       "env": {
         "WORKING_DIR": ".claude"
       }

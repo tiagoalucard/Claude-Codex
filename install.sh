@@ -50,39 +50,180 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Verificar versão do Node.js
+check_node_version() {
+    if ! command_exists node; then
+        return 1
+    fi
+
+    local node_version=$(node -v | sed 's/v//' | cut -d'.' -f1)
+    if [ "$node_version" -lt 20 ]; then
+        return 1
+    fi
+    return 0
+}
+
+# Instalar pacote npm com tratamento de permissões
+npm_install_global() {
+    local package=$1
+
+    # Tentar instalar sem sudo primeiro
+    if npm install -g "$package" 2>/dev/null; then
+        return 0
+    fi
+
+    # Se falhou, tentar com sudo
+    print_warning "Permissões insuficientes, tentando com sudo..."
+    if sudo npm install -g "$package"; then
+        return 0
+    fi
+
+    return 1
+}
+
+# Instalar Node.js
+install_nodejs() {
+    local os=$(detect_os)
+    print_message "Instalando Node.js..."
+
+    case $os in
+        "macos")
+            if command_exists brew; then
+                brew install node
+            else
+                print_error "Homebrew não encontrado. Instale Node.js manualmente de: https://nodejs.org/"
+                exit 1
+            fi
+            ;;
+        "linux")
+            if command_exists apt-get; then
+                sudo apt-get update
+                sudo apt-get install -y nodejs npm
+            elif command_exists yum; then
+                sudo yum install -y nodejs npm
+            elif command_exists dnf; then
+                sudo dnf install -y nodejs npm
+            elif command_exists pacman; then
+                sudo pacman -S --noconfirm nodejs npm
+            else
+                print_error "Gerenciador de pacotes não suportado. Instale Node.js manualmente de: https://nodejs.org/"
+                exit 1
+            fi
+            ;;
+        "windows")
+            print_error "Por favor, instale Node.js manualmente de: https://nodejs.org/"
+            print_message "Após instalar, reinicie o terminal e execute este script novamente"
+            exit 1
+            ;;
+    esac
+}
+
+# Instalar Python
+install_python() {
+    local os=$(detect_os)
+    print_message "Instalando Python 3..."
+
+    case $os in
+        "macos")
+            if command_exists brew; then
+                brew install python3
+            else
+                print_error "Homebrew não encontrado. Instale Python manualmente de: https://www.python.org/"
+                exit 1
+            fi
+            ;;
+        "linux")
+            if command_exists apt-get; then
+                sudo apt-get update
+                sudo apt-get install -y python3 python3-pip
+            elif command_exists yum; then
+                sudo yum install -y python3 python3-pip
+            elif command_exists dnf; then
+                sudo dnf install -y python3 python3-pip
+            elif command_exists pacman; then
+                sudo pacman -S --noconfirm python python-pip
+            else
+                print_error "Gerenciador de pacotes não suportado. Instale Python manualmente de: https://www.python.org/"
+                exit 1
+            fi
+            ;;
+        "windows")
+            print_error "Por favor, instale Python manualmente de: https://www.python.org/"
+            print_message "Após instalar, reinicie o terminal e execute este script novamente"
+            exit 1
+            ;;
+    esac
+}
+
 # Verificar dependências
 check_dependencies() {
     print_message "Verificando dependências do sistema..."
 
     local missing_deps=()
+    local warnings=()
 
+    # Verificar Node.js
     if ! command_exists node; then
         missing_deps+=("Node.js")
+    elif ! check_node_version; then
+        warnings+=("Node.js v20+ recomendado (atual: $(node -v))")
     fi
 
+    # Verificar npm
     if ! command_exists npm; then
         missing_deps+=("npm")
     fi
 
+    # Verificar Python
     if ! command_exists python3; then
         missing_deps+=("Python 3")
     fi
 
-    if ! command_exists pip && ! command_exists pip3; then
-        missing_deps+=("pip")
+    # Verificar pip ou pipx
+    if ! command_exists pipx && ! command_exists pip && ! command_exists pip3; then
+        missing_deps+=("pipx ou pip")
     fi
+
+    # Mostrar avisos
+    for warning in "${warnings[@]}"; do
+        print_warning "$warning"
+    done
 
     if [ ${#missing_deps[@]} -ne 0 ]; then
-        print_error "Faltam as seguintes dependências: ${missing_deps[*]}"
-        print_message "Por favor, instale as dependências faltantes antes de executar este script"
+        print_warning "Faltam as seguintes dependências: ${missing_deps[*]}"
         echo ""
-        print_message "Sugestões de instalação:"
-        echo "  Node.js: https://nodejs.org/"
-        echo "  Python: https://www.python.org/"
-        exit 1
-    fi
 
-    print_message "Todas as dependências verificadas ✓"
+        # Perguntar se deseja instalar automaticamente
+        read -p "Deseja instalar as dependências automaticamente? (y/N): " auto_install
+
+        if [[ "$auto_install" =~ ^[Yy]$ ]]; then
+            # Instalar Node.js e npm se necessário
+            if ! command_exists node || ! command_exists npm; then
+                install_nodejs
+            fi
+
+            # Instalar Python e pip se necessário
+            if ! command_exists python3 || { ! command_exists pipx && ! command_exists pip && ! command_exists pip3; }; then
+                install_python
+            fi
+
+            # Verificar novamente
+            if ! command_exists node || ! command_exists npm || ! command_exists python3; then
+                print_error "Algumas dependências ainda estão faltando após a instalação"
+                exit 1
+            fi
+
+            print_message "Todas as dependências instaladas com sucesso ✓"
+        else
+            print_error "Instalação cancelada. Por favor, instale as dependências manualmente:"
+            echo ""
+            echo "  Node.js v20+: https://nodejs.org/"
+            echo "  Python: https://www.python.org/"
+            exit 1
+        fi
+    else
+        print_message "Todas as dependências verificadas ✓"
+    fi
 }
 
 # Obter diretório de configuração do Claude
@@ -119,44 +260,46 @@ create_config_dir() {
 
 # Escolher template de configuração
 choose_config() {
-    echo ""
-    print_message "Por favor, escolha o template de configuração:"
-    echo "1) Configuração Simples (Recomendado para iniciantes) - Colaboração básica Claude + Codex"
-    echo "2) Configuração Padrão (Recomendado para uso diário) - Ambiente de desenvolvimento colaborativo completo"
-    echo "3) Configuração Avançada (Recomendado para usuários avançados) - Ambiente de desenvolvimento empresarial"
-    echo ""
+    echo "" >&2
+    print_message "Por favor, escolha o template de configuração:" >&2
+    echo "1) Configuração Simples (Recomendado para iniciantes)" >&2
+    echo "   - Sequential-thinking, Codex" >&2
+    echo "" >&2
+    echo "2) Configuração Padrão (Recomendado para uso diário)" >&2
+    echo "   - Sequential-thinking, Shrimp Tasks, Codex, Code Index" >&2
+    echo "" >&2
+    echo "3) Configuração Avançada (Para usuários experientes)" >&2
+    echo "   - Padrão + Chrome DevTools, Exa Search" >&2
+    echo "" >&2
 
     while true; do
         read -p "Por favor, insira sua escolha (1-3): " choice
         case $choice in
             1)
-                echo "config-simple.json"
-                echo "simple"
+                echo "config-simple.json|simple"
                 break
                 ;;
             2)
-                echo "claude-desktop-config.json"
-                echo "standard"
+                echo "claude-desktop-config.json|standard"
                 break
                 ;;
             3)
-                echo "config-advanced.json"
-                echo "advanced"
+                echo "config-advanced.json|advanced"
                 break
                 ;;
             *)
-                print_warning "Por favor, insira uma escolha válida (1-3)"
+                print_warning "Por favor, insira uma escolha válida (1-3)" >&2
                 ;;
         esac
     done
 }
 
-
 # Gerar arquivo de configuração
 generate_config() {
     local template_file=$1
-    local exa_api_key=$2
-    local output_file=$3
+    local openai_api_key=$2
+    local exa_api_key=$3
+    local output_file=$4
 
     # Verificar se o arquivo de template existe
     if [ ! -f "$template_file" ]; then
@@ -166,14 +309,28 @@ generate_config() {
 
     print_message "Gerando arquivo de configuração: $output_file"
 
-    # Se houver chave API Exa, substitui; caso contrário, copia sem modificação
+    # Copiar template para arquivo temporário
+    local temp_file=$(mktemp)
+    cp "$template_file" "$temp_file"
+
+    # Substituir chave API OpenAI se fornecida
+    if [ -n "$openai_api_key" ]; then
+        sed -i "s/your-openai-api-key-here/$openai_api_key/g" "$temp_file"
+        print_message "Chave API OpenAI configurada ✓"
+    fi
+
+    # Substituir chave API Exa se fornecida
     if [ -n "$exa_api_key" ]; then
-        sed "s/your-exa-api-key-here/$exa_api_key/g" "$template_file" > "$output_file"
+        sed -i "s/your-exa-api-key-here/$exa_api_key/g" "$temp_file"
         print_message "Chave API Exa configurada ✓"
-    else
-        # Copiar configuração sem modificação (usuário pode adicionar depois)
-        cp "$template_file" "$output_file"
-        print_message "Configuração copiada (chave API Exa pode ser adicionada depois)"
+    fi
+
+    # Mover arquivo temporário para destino final
+    mv "$temp_file" "$output_file"
+
+    # Se nenhuma chave foi configurada, avisar
+    if [ -z "$openai_api_key" ] && [ -z "$exa_api_key" ]; then
+        print_message "Configuração copiada (chaves API podem ser adicionadas depois)"
     fi
 
     print_message "Arquivo de configuração gerado ✓"
@@ -211,16 +368,11 @@ install_basic_packages() {
 
     for package in "${packages[@]}"; do
         print_message "Instalando $package..."
-        npm install -g "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
+        npm_install_global "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
     done
 
-    # Codex geralmente precisa ser instalado separadamente, verificar se está disponível
-    if ! command_exists codex; then
-        print_warning "Codex não encontrado, certifique-se de que o Codex está corretamente instalado"
-        print_message "Guia de instalação do Codex: consulte a documentação oficial"
-    else
-        print_message "Codex instalado ✓"
-    fi
+    # Codex será usado via npx (não precisa estar instalado globalmente)
+    print_message "Codex será usado via npx @openai/codex ✓"
 }
 
 # Instalar pacotes padrão (configuração padrão)
@@ -234,15 +386,11 @@ install_standard_packages() {
 
     for package in "${packages[@]}"; do
         print_message "Instalando $package..."
-        npm install -g "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
+        npm_install_global "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
     done
 
-    # Verificar Codex
-    if ! command_exists codex; then
-        print_warning "Codex não encontrado, certifique-se de que o Codex está corretamente instalado"
-    else
-        print_message "Codex instalado ✓"
-    fi
+    # Codex será usado via npx (não precisa estar instalado globalmente)
+    print_message "Codex será usado via npx @openai/codex ✓"
 
     # Instalar code-index-mcp
     install_code_index
@@ -255,21 +403,32 @@ install_all_packages() {
     local packages=(
         "@modelcontextprotocol/server-sequential-thinking"
         "mcp-shrimp-task-manager"
-        "chrome-devtools-mcp@latest"
         "exa-mcp-server"
+    )
+
+    # Pacotes que precisam de Node v20+
+    local node20_packages=(
+        "chrome-devtools-mcp@latest"
     )
 
     for package in "${packages[@]}"; do
         print_message "Instalando $package..."
-        npm install -g "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
+        npm_install_global "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
     done
 
-    # Verificar Codex
-    if ! command_exists codex; then
-        print_warning "Codex não encontrado, certifique-se de que o Codex está corretamente instalado"
+    # Instalar pacotes que precisam de Node v20+ apenas se a versão for adequada
+    if check_node_version; then
+        for package in "${node20_packages[@]}"; do
+            print_message "Instalando $package..."
+            npm_install_global "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
+        done
     else
-        print_message "Codex instalado ✓"
+        print_warning "chrome-devtools-mcp requer Node.js v20+. Pulando instalação."
+        print_message "Para instalar, atualize o Node.js: https://nodejs.org/"
     fi
+
+    # Codex será usado via npx (não precisa estar instalado globalmente)
+    print_message "Codex será usado via npx @openai/codex ✓"
 
     # Instalar code-index-mcp
     install_code_index
@@ -282,16 +441,39 @@ install_code_index() {
     # Verificar se uvx está disponível
     if ! command_exists uvx; then
         print_message "Instalando uv (que fornece uvx)..."
-        if command_exists pip3; then
-            pip3 install uv || print_warning "Falha ao instalar uv, pode ser instalado manualmente depois"
+
+        # Verificar se pipx está disponível
+        if command_exists pipx; then
+            pipx install uv || print_warning "Falha ao instalar uv via pipx"
+        elif command_exists pip3; then
+            # Tentar com --user primeiro
+            pip3 install --user uv 2>/dev/null || \
+            # Se falhar, tentar com --break-system-packages como último recurso
+            pip3 install --break-system-packages uv 2>/dev/null || \
+            print_warning "Falha ao instalar uv. Considere instalar pipx primeiro: 'sudo apt install pipx' ou 'python3 -m pip install --user pipx'"
+        elif command_exists pip; then
+            pip install --user uv 2>/dev/null || \
+            pip install --break-system-packages uv 2>/dev/null || \
+            print_warning "Falha ao instalar uv. Considere instalar pipx primeiro"
         else
-            pip install uv || print_warning "Falha ao instalar uv, pode ser instalado manualmente depois"
+            print_warning "pip/pip3 não encontrado. Não é possível instalar uv."
+            return 1
+        fi
+
+        # Adicionar ~/.local/bin ao PATH se necessário
+        if [ -d "$HOME/.local/bin" ] && [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+            print_message "Adicionando ~/.local/bin ao PATH..."
+            export PATH="$HOME/.local/bin:$PATH"
         fi
     fi
 
     # Testar code-index-mcp
     if command_exists uvx; then
-        uvx code-index-mcp --help >/dev/null 2>&1 || print_warning "Falha no teste do code-index-mcp"
+        print_message "Testando code-index-mcp..."
+        uvx code-index-mcp --help >/dev/null 2>&1 && print_message "code-index-mcp instalado ✓" || \
+        print_warning "code-index-mcp disponível, mas falhou no teste (isso é normal na primeira execução)"
+    else
+        print_warning "uvx não encontrado após instalação. Você pode instalar manualmente: https://docs.astral.sh/uv/"
     fi
 }
 
@@ -312,6 +494,103 @@ verify_installation() {
     print_message "Verificação de instalação concluída ✓"
 }
 
+# Adicionar MCPs ao Claude Code
+add_mcps_to_claude_code() {
+    print_message "Configurando servidores MCP no Claude Code..."
+
+    # Verificar se Claude Code está instalado
+    if ! command_exists claude; then
+        print_warning "Claude Code não encontrado. Pulando configuração de MCP."
+        print_message "Instale Claude Code de: https://github.com/anthropics/claude-code"
+        return 0
+    fi
+
+    # Importar servidores MCP do Claude Desktop
+    print_message "Importando servidores MCP do Claude Desktop para Claude Code..."
+
+    # Tentar importar com scope user (configuração do usuário)
+    local import_output=$(claude mcp add-from-claude-desktop --scope user 2>&1)
+
+    if echo "$import_output" | grep -qi "success\|imported\|added"; then
+        print_message "Servidores MCP importados com sucesso para Claude Code ✓"
+    else
+        print_warning "Importação automática falhou. Saída: $import_output"
+        print_message "Tentando importação manual dos servidores..."
+
+        # Método alternativo: adicionar servidores manualmente
+        add_mcps_manually
+    fi
+
+    # Listar servidores configurados
+    print_message "Servidores MCP configurados:"
+    claude mcp list 2>/dev/null || print_warning "Não foi possível listar servidores MCP"
+}
+
+# Adicionar MCPs manualmente ao Claude Code
+add_mcps_manually() {
+    local config_file="$HOME/.config/claude/claude_desktop_config.json"
+
+    if [ ! -f "$config_file" ]; then
+        print_error "Arquivo de configuração não encontrado: $config_file"
+        return 1
+    fi
+
+    print_message "Adicionando servidores MCP manualmente..."
+
+    # Adicionar sequential-thinking
+    if grep -q "sequential-thinking" "$config_file"; then
+        print_message "Adicionando sequential-thinking..."
+        claude mcp add --scope user --transport stdio sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking 2>/dev/null && \
+            print_message "✓ sequential-thinking adicionado" || \
+            print_warning "✗ Falha ao adicionar sequential-thinking"
+    fi
+
+    # Adicionar shrimp-task-manager se existir
+    if grep -q "shrimp-task-manager" "$config_file"; then
+        print_message "Adicionando shrimp-task-manager..."
+        claude mcp add --scope user --transport stdio shrimp-task-manager -- npx -y mcp-shrimp-task-manager 2>/dev/null && \
+            print_message "✓ shrimp-task-manager adicionado" || \
+            print_warning "✗ Falha ao adicionar shrimp-task-manager"
+    fi
+
+    # Adicionar codex se existir
+    if grep -q "\"codex\"" "$config_file"; then
+        print_message "Adicionando codex..."
+        claude mcp add --scope user --transport stdio codex -- npx -y @openai/codex mcp-server 2>/dev/null && \
+            print_message "✓ codex adicionado" || \
+            print_warning "✗ Falha ao adicionar codex"
+    fi
+
+    # Adicionar code-index se existir
+    if grep -q "code-index" "$config_file"; then
+        print_message "Adicionando code-index..."
+        claude mcp add --scope user --transport stdio code-index -- uvx code-index-mcp 2>/dev/null && \
+            print_message "✓ code-index adicionado" || \
+            print_warning "✗ Falha ao adicionar code-index"
+    fi
+
+    # Adicionar exa se existir
+    if grep -q "\"exa\"" "$config_file"; then
+        print_message "Adicionando exa..."
+        local exa_key=$(grep -A5 "\"exa\"" "$config_file" | grep "EXA_API_KEY" | sed 's/.*": "//;s/".*//')
+        if [ -n "$exa_key" ] && [ "$exa_key" != "your-exa-api-key-here" ]; then
+            claude mcp add --scope user --transport stdio --env EXA_API_KEY="$exa_key" exa -- npx -y exa-mcp-server 2>/dev/null && \
+                print_message "✓ exa adicionado" || \
+                print_warning "✗ Falha ao adicionar exa"
+        else
+            print_warning "Chave API Exa não configurada, pulando exa"
+        fi
+    fi
+
+    # Adicionar chrome-devtools se existir e Node >= 20
+    if grep -q "chrome-devtools" "$config_file" && check_node_version; then
+        print_message "Adicionando chrome-devtools..."
+        claude mcp add --scope user --transport stdio chrome-devtools -- npx chrome-devtools-mcp@latest 2>/dev/null && \
+            print_message "✓ chrome-devtools adicionado" || \
+            print_warning "✗ Falha ao adicionar chrome-devtools"
+    fi
+}
+
 # Criar estrutura de diretórios de trabalho
 create_working_directories() {
     local config_dir=$1
@@ -326,21 +605,59 @@ create_working_directories() {
     print_message "Estrutura de diretórios de trabalho criada ✓"
 }
 
+# Obter chave API OpenAI
+get_openai_api_key() {
+    echo "" >&2
+    print_message "Por favor, insira sua chave API OpenAI (opcional):" >&2
+    print_warning "Necessária para funcionalidades que usam modelos OpenAI" >&2
+    print_message "Obtenha sua chave em: https://platform.openai.com/api-keys" >&2
+    echo "" >&2
+
+    read -s -p "Chave API OpenAI (opcional, pressione Enter para pular): " openai_key
+    echo "" >&2
+
+    if [ -z "$openai_key" ]; then
+        print_message "Configuração da chave API OpenAI pulada" >&2
+    fi
+
+    echo "$openai_key"
+}
+
 # Obter chave API Exa
 get_exa_api_key() {
-    echo ""
-    print_message "Por favor, insira sua chave API Exa (opcional):"
-    print_warning "Se você ainda não tem uma chave API Exa, pode pular esta etapa"
-    echo ""
+    echo "" >&2
+    print_message "Por favor, insira sua chave API Exa (opcional):" >&2
+    print_warning "Necessária para pesquisa avançada na web" >&2
+    print_message "Obtenha sua chave em: https://exa.ai/" >&2
+    echo "" >&2
 
     read -s -p "Chave API Exa (opcional, pressione Enter para pular): " exa_key
-    echo ""
+    echo "" >&2
 
     if [ -z "$exa_key" ]; then
-        print_message "Configuração da chave API Exa pulada"
+        print_message "Configuração da chave API Exa pulada" >&2
     fi
 
     echo "$exa_key"
+}
+
+# Testar servidores MCP
+test_mcp_servers() {
+    print_message "Testando servidores MCP instalados..."
+    echo ""
+
+    print_message "Verificando MCPs via Claude Code..."
+
+    # Usar o comando do Claude Code para verificar os MCPs
+    if command_exists claude; then
+        claude mcp list 2>/dev/null | grep -E "✓|✗|Connected|Failed" || print_warning "Não foi possível verificar o status dos MCPs"
+    else
+        print_warning "Claude Code não está instalado, pulando verificação de MCPs"
+        return 0
+    fi
+
+    echo ""
+    print_message "Dica: Execute 'claude mcp list' para ver o status detalhado dos servidores MCP"
 }
 
 # Exibir informações de conclusão
@@ -381,16 +698,29 @@ show_completion() {
     esac
 
     echo ""
-    print_message "Próximos passos:"
-    echo "1. Reinicie o aplicativo Claude Code"
-    echo "2. No Claude Code, digite: /available-tools"
-    echo "3. Confirme que você pode ver as ferramentas MCP instaladas"
+    print_message "Próximos passos para usar:"
+    echo "1. Para usar no Claude Code CLI, execute:"
+    echo "   cd seu-projeto"
+    echo "   claude"
+    echo ""
+    echo "2. No Claude Code, os servidores MCP estarão disponíveis automaticamente"
+    echo ""
+    echo "3. Verifique os servidores MCP configurados:"
+    echo "   claude mcp list"
+    echo ""
+    echo "4. Para testar uma funcionalidade, tente:"
+    echo "   claude \"Liste os arquivos deste projeto usando code-index\""
     echo ""
     print_message "Localização do arquivo de configuração:"
     echo "$(get_claude_config_dir)/claude_desktop_config.json"
     echo ""
     print_message "Estrutura do diretório de trabalho:"
     echo "$(dirname $(get_claude_config_dir))/.claude/"
+    echo ""
+    print_message "Comandos úteis:"
+    echo "  claude mcp list          # Listar servidores MCP"
+    echo "  claude mcp get <nome>    # Ver detalhes de um servidor"
+    echo "  claude --help            # Ajuda do Claude Code"
     echo ""
     print_message "Se encontrar problemas, consulte o guia de solução de problemas:"
     echo "https://github.com/claude-codex/setup/troubleshooting"
@@ -412,25 +742,34 @@ main() {
 
     # Selecionar template de configuração (retorna nome do arquivo e nível de configuração)
     local config_choice=$(choose_config)
-    local template_filename=$(echo "$config_choice" | head -n1)
-    local config_level=$(echo "$config_choice" | tail -n1)
+    local template_filename=$(echo "$config_choice" | cut -d'|' -f1)
+    local config_level=$(echo "$config_choice" | cut -d'|' -f2)
 
     # Caminho completo do template
     local template_file="$script_dir/$template_filename"
 
-    # Verificar se é necessária chave API (somente configuração avançada precisa)
-    local api_key=""
+    # Coletar chaves API
+    local openai_key=""
+    local exa_key=""
+
+    # Perguntar sobre chave OpenAI (todas as configurações)
+    print_message "Configuração de chaves API"
+    read -p "Deseja configurar a chave API OpenAI? (y/N): " setup_openai
+    if [[ "$setup_openai" =~ ^[Yy]$ ]]; then
+        openai_key=$(get_openai_api_key)
+    fi
+
+    # Perguntar sobre chave Exa (somente configuração avançada)
     if [ "$config_level" = "advanced" ]; then
-        print_message "Configuração avançada requer chave API Exa (opcional)"
         read -p "Deseja configurar a chave API Exa? (y/N): " setup_exa
         if [[ "$setup_exa" =~ ^[Yy]$ ]]; then
-            api_key=$(get_exa_api_key)
+            exa_key=$(get_exa_api_key)
         fi
     fi
 
     # Gerar arquivo de configuração
     local config_file="$config_dir/claude_desktop_config.json"
-    generate_config "$template_file" "$api_key" "$config_file"
+    generate_config "$template_file" "$openai_key" "$exa_key" "$config_file"
 
     # Verificar se o arquivo foi criado com sucesso
     if [ ! -f "$config_file" ]; then
@@ -446,6 +785,12 @@ main() {
 
     # Verificar instalação
     verify_installation
+
+    # Adicionar MCPs ao Claude Code
+    add_mcps_to_claude_code
+
+    # Testar servidores MCP
+    test_mcp_servers
 
     # Exibir informações de conclusão
     show_completion "$config_level"
