@@ -1,37 +1,38 @@
 #!/bin/bash
 
-# Claude Code + Codex 一键安装脚本
-# 支持 macOS, Linux, Windows (Git Bash)
+# Script de instalação automática do Claude Code + Codex
+# Suporta macOS, Linux, Windows (Git Bash)
 
-set -e
+# Não usar set -e para permitir que algumas falhas sejam tratadas com ||
+# set -e
 
-# 颜色定义
+# Definições de cores
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m' # Sem cor
 
-# 打印带颜色的消息
+# Imprimir mensagens coloridas
 print_message() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[AVISO]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERRO]${NC} $1"
 }
 
 print_header() {
     echo -e "${BLUE}================================${NC}"
-    echo -e "${BLUE}  Claude Code + Codex 安装向导  ${NC}"
+    echo -e "${BLUE}  Assistente de Instalação Claude Code + Codex  ${NC}"
     echo -e "${BLUE}================================${NC}"
 }
 
-# 检测操作系统
+# Detectar sistema operacional
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo "macos"
@@ -44,14 +45,14 @@ detect_os() {
     fi
 }
 
-# 检查命令是否存在
+# Verificar se o comando existe
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# 检查依赖
+# Verificar dependências
 check_dependencies() {
-    print_message "检查系统依赖..."
+    print_message "Verificando dependências do sistema..."
 
     local missing_deps=()
 
@@ -67,24 +68,24 @@ check_dependencies() {
         missing_deps+=("Python 3")
     fi
 
-    if ! command_exists pip; then
+    if ! command_exists pip && ! command_exists pip3; then
         missing_deps+=("pip")
     fi
 
     if [ ${#missing_deps[@]} -ne 0 ]; then
-        print_error "缺少以下依赖: ${missing_deps[*]}"
-        print_message "请先安装缺少的依赖后再运行此脚本"
+        print_error "Faltam as seguintes dependências: ${missing_deps[*]}"
+        print_message "Por favor, instale as dependências faltantes antes de executar este script"
         echo ""
-        print_message "安装建议:"
+        print_message "Sugestões de instalação:"
         echo "  Node.js: https://nodejs.org/"
         echo "  Python: https://www.python.org/"
         exit 1
     fi
 
-    print_message "所有依赖检查通过 ✓"
+    print_message "Todas as dependências verificadas ✓"
 }
 
-# 获取Claude配置目录
+# Obter diretório de configuração do Claude
 get_claude_config_dir() {
     local os=$(detect_os)
     case $os in
@@ -98,35 +99,35 @@ get_claude_config_dir() {
             echo "$APPDATA/Claude"
             ;;
         *)
-            print_error "不支持的操作系统: $os"
+            print_error "Sistema operacional não suportado: $os"
             exit 1
             ;;
     esac
 }
 
-# 创建配置目录
+# Criar diretório de configuração
 create_config_dir() {
     local config_dir=$(get_claude_config_dir)
 
     if [ ! -d "$config_dir" ]; then
-        print_message "创建Claude配置目录: $config_dir"
+        print_message "Criando diretório de configuração do Claude: $config_dir"
         mkdir -p "$config_dir"
     fi
 
     echo "$config_dir"
 }
 
-# 选择配置模板
+# Escolher template de configuração
 choose_config() {
     echo ""
-    print_message "请选择配置模板:"
-    echo "1) 简单配置 (推荐新手) - Claude + Codex基础协作"
-    echo "2) 标准配置 (推荐日常使用) - 完整协作开发环境"
-    echo "3) 高级配置 (推荐高级用户) - 企业级开发环境"
+    print_message "Por favor, escolha o template de configuração:"
+    echo "1) Configuração Simples (Recomendado para iniciantes) - Colaboração básica Claude + Codex"
+    echo "2) Configuração Padrão (Recomendado para uso diário) - Ambiente de desenvolvimento colaborativo completo"
+    echo "3) Configuração Avançada (Recomendado para usuários avançados) - Ambiente de desenvolvimento empresarial"
     echo ""
 
     while true; do
-        read -p "请输入选择 (1-3): " choice
+        read -p "Por favor, insira sua escolha (1-3): " choice
         case $choice in
             1)
                 echo "config-simple.json"
@@ -144,38 +145,44 @@ choose_config() {
                 break
                 ;;
             *)
-                print_warning "请输入有效选择 (1-3)"
+                print_warning "Por favor, insira uma escolha válida (1-3)"
                 ;;
         esac
     done
 }
 
 
-# 生成配置文件
+# Gerar arquivo de configuração
 generate_config() {
     local template_file=$1
     local exa_api_key=$2
     local output_file=$3
 
-    print_message "生成配置文件: $output_file"
-
-    # 如果有Exa API密钥，则替换；否则移除相关配置
-    if [ -n "$exa_api_key" ]; then
-        sed "s/your-exa-api-key-here/$exa_api_key/g" "$template_file" > "$output_file"
-        print_message "Exa API密钥已设置 ✓"
-    else
-        # 移除Exa配置（如果存在）
-        sed '/exa/,/}/d' "$template_file" > "$output_file"
-        print_message "跳过Exa配置"
+    # Verificar se o arquivo de template existe
+    if [ ! -f "$template_file" ]; then
+        print_error "Arquivo de template não encontrado: $template_file"
+        exit 1
     fi
 
-    print_message "配置文件生成完成 ✓"
+    print_message "Gerando arquivo de configuração: $output_file"
+
+    # Se houver chave API Exa, substitui; caso contrário, copia sem modificação
+    if [ -n "$exa_api_key" ]; then
+        sed "s/your-exa-api-key-here/$exa_api_key/g" "$template_file" > "$output_file"
+        print_message "Chave API Exa configurada ✓"
+    else
+        # Copiar configuração sem modificação (usuário pode adicionar depois)
+        cp "$template_file" "$output_file"
+        print_message "Configuração copiada (chave API Exa pode ser adicionada depois)"
+    fi
+
+    print_message "Arquivo de configuração gerado ✓"
 }
 
-# 根据配置级别安装对应的包
+# Instalar pacotes de acordo com o nível de configuração
 install_packages_by_config() {
     local config_level=$1
-    print_message "为 $config_level 配置安装对应的包..."
+    print_message "Instalando pacotes para configuração $config_level..."
 
     case $config_level in
         "simple")
@@ -188,37 +195,37 @@ install_packages_by_config() {
             install_all_packages
             ;;
         *)
-            print_error "未知的配置级别: $config_level"
+            print_error "Nível de configuração desconhecido: $config_level"
             return 1
             ;;
     esac
 }
 
-# 安装基础包（简单配置）
+# Instalar pacotes básicos (configuração simples)
 install_basic_packages() {
-    print_message "安装基础包（简单配置）..."
+    print_message "Instalando pacotes básicos (configuração simples)..."
 
     local packages=(
         "@modelcontextprotocol/server-sequential-thinking"
     )
 
     for package in "${packages[@]}"; do
-        print_message "安装 $package..."
-        npm install -g "$package" || print_warning "$package 安装失败，可稍后手动安装"
+        print_message "Instalando $package..."
+        npm install -g "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
     done
 
-    # Codex 通常需要单独安装，检查是否可用
+    # Codex geralmente precisa ser instalado separadamente, verificar se está disponível
     if ! command_exists codex; then
-        print_warning "Codex 未找到，请确保已正确安装 Codex"
-        print_info "Codex 安装指南：请参考官方文档"
+        print_warning "Codex não encontrado, certifique-se de que o Codex está corretamente instalado"
+        print_message "Guia de instalação do Codex: consulte a documentação oficial"
     else
-        print_message "Codex 已安装 ✓"
+        print_message "Codex instalado ✓"
     fi
 }
 
-# 安装标准包（标准配置）
+# Instalar pacotes padrão (configuração padrão)
 install_standard_packages() {
-    print_message "安装标准包（标准配置）..."
+    print_message "Instalando pacotes padrão (configuração padrão)..."
 
     local packages=(
         "@modelcontextprotocol/server-sequential-thinking"
@@ -226,24 +233,24 @@ install_standard_packages() {
     )
 
     for package in "${packages[@]}"; do
-        print_message "安装 $package..."
-        npm install -g "$package" || print_warning "$package 安装失败，可稍后手动安装"
+        print_message "Instalando $package..."
+        npm install -g "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
     done
 
-    # 检查 Codex
+    # Verificar Codex
     if ! command_exists codex; then
-        print_warning "Codex 未找到，请确保已正确安装 Codex"
+        print_warning "Codex não encontrado, certifique-se de que o Codex está corretamente instalado"
     else
-        print_message "Codex 已安装 ✓"
+        print_message "Codex instalado ✓"
     fi
 
-    # 安装 code-index-mcp
+    # Instalar code-index-mcp
     install_code_index
 }
 
-# 安装所有包（高级配置）
+# Instalar todos os pacotes (configuração avançada)
 install_all_packages() {
-    print_message "安装所有包（高级配置）..."
+    print_message "Instalando todos os pacotes (configuração avançada)..."
 
     local packages=(
         "@modelcontextprotocol/server-sequential-thinking"
@@ -253,195 +260,196 @@ install_all_packages() {
     )
 
     for package in "${packages[@]}"; do
-        print_message "安装 $package..."
-        npm install -g "$package" || print_warning "$package 安装失败，可稍后手动安装"
+        print_message "Instalando $package..."
+        npm install -g "$package" || print_warning "Falha ao instalar $package, pode ser instalado manualmente depois"
     done
 
-    # 检查 Codex
+    # Verificar Codex
     if ! command_exists codex; then
-        print_warning "Codex 未找到，请确保已正确安装 Codex"
+        print_warning "Codex não encontrado, certifique-se de que o Codex está corretamente instalado"
     else
-        print_message "Codex 已安装 ✓"
+        print_message "Codex instalado ✓"
     fi
 
-    # 安装 code-index-mcp
+    # Instalar code-index-mcp
     install_code_index
 }
 
-# 安装 code-index-mcp
+# Instalar code-index-mcp
 install_code_index() {
-    print_message "安装 code-index-mcp..."
+    print_message "Instalando code-index-mcp..."
 
-    # 检查 uvx 是否可用
+    # Verificar se uvx está disponível
     if ! command_exists uvx; then
-        print_message "安装 uvx..."
-        pip install uv || print_warning "uvx 安装失败，可稍后手动安装"
+        print_message "Instalando uv (que fornece uvx)..."
+        if command_exists pip3; then
+            pip3 install uv || print_warning "Falha ao instalar uv, pode ser instalado manualmente depois"
+        else
+            pip install uv || print_warning "Falha ao instalar uv, pode ser instalado manualmente depois"
+        fi
     fi
 
-    # 测试 code-index-mcp
+    # Testar code-index-mcp
     if command_exists uvx; then
-        uvx code-index-mcp --help >/dev/null 2>&1 || print_warning "code-index-mcp 测试失败"
+        uvx code-index-mcp --help >/dev/null 2>&1 || print_warning "Falha no teste do code-index-mcp"
     fi
 }
 
-# 安装Python包
-install_python_packages() {
-    print_message "安装必要的Python包..."
-
-    # 安装uvx (如果还没有)
-    if ! command_exists uvx; then
-        print_message "安装uvx..."
-        pip install uv || print_warning "uvx安装失败，可稍后手动安装"
-    fi
-
-    # 安装code-index-mcp
-    print_message "安装code-index-mcp..."
-    uvx code-index-mcp --help >/dev/null 2>&1 || print_warning "code-index-mcp安装失败，可稍后手动安装"
-}
-
-# 验证安装
+# Verificar instalação
 verify_installation() {
-    print_message "验证安装..."
+    print_message "Verificando instalação..."
 
     local config_dir=$(get_claude_config_dir)
     local config_file="$config_dir/claude_desktop_config.json"
 
     if [ -f "$config_file" ]; then
-        print_message "配置文件已正确安装 ✓"
+        print_message "Arquivo de configuração instalado corretamente ✓"
     else
-        print_error "配置文件安装失败"
+        print_error "Falha ao instalar arquivo de configuração"
         return 1
     fi
 
-    print_message "安装验证完成 ✓"
+    print_message "Verificação de instalação concluída ✓"
 }
 
-# 显示完成信息
-show_completion() {
-    local config_level=$1
-    echo ""
-    print_header
-    print_message "🎉 Claude Code + Codex 安装完成！"
-    echo ""
-    print_message "安装配置级别: $config_level"
-    echo ""
-
-    case $config_level in
-        "simple")
-            print_message "已安装功能:"
-            echo "✓ Sequential-thinking (深度推理)"
-            echo "✓ Codex (代码分析)"
-            echo "✓ 基础协作工作流"
-            ;;
-        "standard")
-            print_message "已安装功能:"
-            echo "✓ Sequential-thinking (深度推理)"
-            echo "✓ Shrimp Task Manager (任务管理)"
-            echo "✓ Codex (代码分析)"
-            echo "✓ Code Index (代码索引)"
-            echo "✓ 标准协作工作流"
-            ;;
-        "advanced")
-            print_message "已安装功能:"
-            echo "✓ Sequential-thinking (深度推理)"
-            echo "✓ Shrimp Task Manager (任务管理)"
-            echo "✓ Codex (代码分析)"
-            echo "✓ Code Index (代码索引)"
-            echo "✓ Chrome DevTools (浏览器调试)"
-            echo "✓ Exa Search (网络搜索)"
-            echo "✓ 完整协作工作流"
-            ;;
-    esac
-
-    echo ""
-    print_message "下一步操作:"
-    echo "1. 重启Claude Code应用"
-    echo "2. 在Claude Code中输入: /available-tools"
-    echo "3. 确认能看到已安装的MCP工具"
-    echo ""
-    print_message "配置文件位置:"
-    echo "$(get_claude_config_dir)/claude_desktop_config.json"
-    echo ""
-    print_message "工作目录结构:"
-    echo "$(dirname $(get_claude_config_dir))/.claude/"
-    echo ""
-    print_message "如遇问题，请查看故障排除指南:"
-    echo "https://github.com/claude-codex/setup/troubleshooting"
-    echo ""
-}
-
-# 主函数
-main() {
-    print_header
-
-    # 检查依赖
-    check_dependencies
-
-    # 获取配置目录
-    local config_dir=$(create_config_dir)
-
-    # 选择配置模板（返回文件名和配置级别）
-    local config_choice=$(choose_config)
-    local template_file=$(echo "$config_choice" | head -n1)
-    local config_level=$(echo "$config_choice" | tail -n1)
-
-    # 检查是否需要API密钥（仅高级配置需要）
-    local api_key=""
-    if [ "$config_level" = "advanced" ]; then
-        print_message "高级配置需要Exa API密钥（可选）"
-        read -p "是否要设置Exa API密钥？(y/N): " setup_exa
-        if [[ "$setup_exa" =~ ^[Yy]$ ]]; then
-            api_key=$(get_exa_api_key)
-        fi
-    fi
-
-    # 生成配置文件
-    local config_file="$config_dir/claude_desktop_config.json"
-    generate_config "$template_file" "$api_key" "$config_file"
-
-    # 创建工作目录结构
-    create_working_directories "$config_dir"
-
-    # 根据配置级别安装对应的包
-    install_packages_by_config "$config_level"
-
-    # 验证安装
-    verify_installation
-
-    # 显示完成信息
-    show_completion "$config_level"
-}
-
-# 创建工作目录结构
+# Criar estrutura de diretórios de trabalho
 create_working_directories() {
     local config_dir=$1
     local project_dir=$(dirname "$config_dir")
     local claude_dir="$project_dir/.claude"
 
-    print_message "创建工作目录结构..."
+    print_message "Criando estrutura de diretórios de trabalho..."
 
-    # 创建 .claude 目录结构
+    # Criar estrutura de diretórios .claude
     mkdir -p "$claude_dir"/{shrimp,codex,context,logs,cache}
 
-    print_message "工作目录结构创建完成 ✓"
+    print_message "Estrutura de diretórios de trabalho criada ✓"
 }
 
-# 获取Exa API密钥
+# Obter chave API Exa
 get_exa_api_key() {
     echo ""
-    print_message "请输入你的Exa API密钥（可选）："
-    print_warning "如果还没有Exa API密钥，可以跳过此步骤"
+    print_message "Por favor, insira sua chave API Exa (opcional):"
+    print_warning "Se você ainda não tem uma chave API Exa, pode pular esta etapa"
     echo ""
 
-    read -s -p "Exa API Key (可选，按Enter跳过): " exa_key
+    read -s -p "Chave API Exa (opcional, pressione Enter para pular): " exa_key
     echo ""
 
     if [ -z "$exa_key" ]; then
-        print_message "跳过Exa API密钥设置"
+        print_message "Configuração da chave API Exa pulada"
     fi
 
     echo "$exa_key"
 }
 
-# 运行主函数
+# Exibir informações de conclusão
+show_completion() {
+    local config_level=$1
+    echo ""
+    print_header
+    print_message "🎉 Instalação do Claude Code + Codex concluída!"
+    echo ""
+    print_message "Nível de configuração instalado: $config_level"
+    echo ""
+
+    case $config_level in
+        "simple")
+            print_message "Funcionalidades instaladas:"
+            echo "✓ Sequential-thinking (raciocínio profundo)"
+            echo "✓ Codex (análise de código)"
+            echo "✓ Fluxo de trabalho colaborativo básico"
+            ;;
+        "standard")
+            print_message "Funcionalidades instaladas:"
+            echo "✓ Sequential-thinking (raciocínio profundo)"
+            echo "✓ Shrimp Task Manager (gerenciamento de tarefas)"
+            echo "✓ Codex (análise de código)"
+            echo "✓ Code Index (indexação de código)"
+            echo "✓ Fluxo de trabalho colaborativo padrão"
+            ;;
+        "advanced")
+            print_message "Funcionalidades instaladas:"
+            echo "✓ Sequential-thinking (raciocínio profundo)"
+            echo "✓ Shrimp Task Manager (gerenciamento de tarefas)"
+            echo "✓ Codex (análise de código)"
+            echo "✓ Code Index (indexação de código)"
+            echo "✓ Chrome DevTools (depuração de navegador)"
+            echo "✓ Exa Search (pesquisa na web)"
+            echo "✓ Fluxo de trabalho colaborativo completo"
+            ;;
+    esac
+
+    echo ""
+    print_message "Próximos passos:"
+    echo "1. Reinicie o aplicativo Claude Code"
+    echo "2. No Claude Code, digite: /available-tools"
+    echo "3. Confirme que você pode ver as ferramentas MCP instaladas"
+    echo ""
+    print_message "Localização do arquivo de configuração:"
+    echo "$(get_claude_config_dir)/claude_desktop_config.json"
+    echo ""
+    print_message "Estrutura do diretório de trabalho:"
+    echo "$(dirname $(get_claude_config_dir))/.claude/"
+    echo ""
+    print_message "Se encontrar problemas, consulte o guia de solução de problemas:"
+    echo "https://github.com/claude-codex/setup/troubleshooting"
+    echo ""
+}
+
+# Função principal
+main() {
+    print_header
+
+    # Verificar dependências
+    check_dependencies
+
+    # Obter diretório de configuração
+    local config_dir=$(create_config_dir)
+
+    # Obter diretório do script para localizar os templates
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    # Selecionar template de configuração (retorna nome do arquivo e nível de configuração)
+    local config_choice=$(choose_config)
+    local template_filename=$(echo "$config_choice" | head -n1)
+    local config_level=$(echo "$config_choice" | tail -n1)
+
+    # Caminho completo do template
+    local template_file="$script_dir/$template_filename"
+
+    # Verificar se é necessária chave API (somente configuração avançada precisa)
+    local api_key=""
+    if [ "$config_level" = "advanced" ]; then
+        print_message "Configuração avançada requer chave API Exa (opcional)"
+        read -p "Deseja configurar a chave API Exa? (y/N): " setup_exa
+        if [[ "$setup_exa" =~ ^[Yy]$ ]]; then
+            api_key=$(get_exa_api_key)
+        fi
+    fi
+
+    # Gerar arquivo de configuração
+    local config_file="$config_dir/claude_desktop_config.json"
+    generate_config "$template_file" "$api_key" "$config_file"
+
+    # Verificar se o arquivo foi criado com sucesso
+    if [ ! -f "$config_file" ]; then
+        print_error "Falha ao criar arquivo de configuração"
+        exit 1
+    fi
+
+    # Criar estrutura de diretórios de trabalho
+    create_working_directories "$config_dir"
+
+    # Instalar pacotes de acordo com o nível de configuração
+    install_packages_by_config "$config_level"
+
+    # Verificar instalação
+    verify_installation
+
+    # Exibir informações de conclusão
+    show_completion "$config_level"
+}
+
+# Executar função principal
 main "$@"

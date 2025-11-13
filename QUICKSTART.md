@@ -1,33 +1,33 @@
-# 🚀 快速开始指南
+# 🚀 Guia de Início Rápido
 
-## 2分钟配置Claude Code + Codex协作环境
+## Configuração em 2 minutos do Ambiente Colaborativo Claude Code + Codex
 
-### 第一步：运行安装命令
+### Primeiro Passo: Execute o Comando de Instalação
 ```bash
 curl -sSL https://raw.githubusercontent.com/Pluviobyte/Claude-Codex/main/install.sh | bash
 ```
 
-### 第二步：选择配置类型
-- **1**: 简单配置（推荐新手）
-- **2**: 标准配置（推荐日常使用）
-- **3**: 高级配置（推荐高级用户）
+### Segundo Passo: Escolha o Tipo de Configuração
+- **1**: Configuração Simples (Recomendado para iniciantes)
+- **2**: Configuração Padrão (Recomendado para uso diário)
+- **3**: Configuração Avançada (Recomendado para usuários avançados)
 
-### 第三步：重启并验证
-1. 重启Claude Code应用
-2. 在聊天中输入：`/available-tools`
-3. 确认能看到codex相关工具
+### Terceiro Passo: Reinicie e Verifique
+1. Reinicie o aplicativo Claude Code
+2. Digite no chat: `/available-tools`
+3. Confirme que consegue ver as ferramentas relacionadas ao codex
 
-## ✅ 完成！
+## ✅ Pronto!
 
-现在你可以开始使用Claude Code + Codex协作开发了！
+Agora você pode começar a usar o desenvolvimento colaborativo Claude Code + Codex!
 
-**示例对话**：
+**Exemplo de conversa**:
 ```
-用户: 帮我创建一个React用户列表组件
+Usuário: Me ajude a criar um componente React de lista de usuários
 
-Claude: 我来帮你创建一个React组件。让我先调用Codex进行深度分析，然后实现这个功能。
+Claude: Vou ajudá-lo a criar um componente React. Deixe-me primeiro chamar o Codex para uma análise profunda e depois implementar essa funcionalidade.
 ```
 
-**遇到问题？**
-运行：`./verify-config.sh` 检查配置
-或查看：[troubleshooting.md](troubleshooting.md)
+**Encontrou problemas?**
+Execute: `./verify-config.sh` para verificar a configuração
+Ou consulte: [troubleshooting.md](troubleshooting.md)

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__code-index__set_project_path",
+      "mcp__code-index__find_files",
+      "mcp__codex__TodoWrite",
+      "mcp__codex__Read",
+      "mcp__codex__Write",
+      "mcp__codex__Edit"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
