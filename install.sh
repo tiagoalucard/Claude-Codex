@@ -32,12 +32,27 @@ print_header() {
     echo -e "${BLUE}================================${NC}"
 }
 
+# Detectar se está rodando no WSL
+is_wsl() {
+    if grep -qEi "(Microsoft|WSL)" /proc/version 2>/dev/null; then
+        return 0
+    elif [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Detectar sistema operacional
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo "macos"
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "linux"
+        if is_wsl; then
+            echo "wsl"
+        else
+            echo "linux"
+        fi
     elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
         echo "windows"
     else
@@ -48,6 +63,60 @@ detect_os() {
 # Verificar se o comando existe
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Função sed compatível multi-OS
+# No macOS, sed -i precisa de '', no Linux não
+sed_inplace() {
+    local pattern=$1
+    local file=$2
+    local os=$(detect_os)
+
+    if [[ "$os" == "macos" ]]; then
+        sed -i '' "$pattern" "$file"
+    else
+        sed -i "$pattern" "$file"
+    fi
+}
+
+# Verificar se winget está disponível (Windows)
+has_winget() {
+    powershell.exe -Command "Get-Command winget -ErrorAction SilentlyContinue" >/dev/null 2>&1
+}
+
+# Verificar se chocolatey está disponível (Windows)
+has_chocolatey() {
+    powershell.exe -Command "Get-Command choco -ErrorAction SilentlyContinue" >/dev/null 2>&1
+}
+
+# Executar comando PowerShell com elevação (admin)
+run_powershell_admin() {
+    local command=$1
+    print_warning "Esta operação requer privilégios de administrador"
+    print_message "Uma janela de UAC pode aparecer - clique em 'Sim' para continuar"
+
+    powershell.exe -Command "Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"$command\"' -Wait" 2>/dev/null
+    return $?
+}
+
+# Instalar pacote via winget
+install_via_winget() {
+    local package_id=$1
+    print_message "Instalando via winget: $package_id"
+
+    # winget pode precisar de interação, então rodamos normalmente
+    powershell.exe -Command "winget install --id $package_id --silent --accept-package-agreements --accept-source-agreements" 2>/dev/null
+    return $?
+}
+
+# Instalar pacote via chocolatey
+install_via_chocolatey() {
+    local package_name=$1
+    print_message "Instalando via chocolatey: $package_name"
+
+    # Chocolatey precisa de privilégios de admin
+    run_powershell_admin "choco install $package_name -y"
+    return $?
 }
 
 # Verificar versão do Node.js
@@ -95,7 +164,7 @@ install_nodejs() {
                 exit 1
             fi
             ;;
-        "linux")
+        "linux"|"wsl")
             if command_exists apt-get; then
                 sudo apt-get update
                 sudo apt-get install -y nodejs npm
@@ -111,8 +180,44 @@ install_nodejs() {
             fi
             ;;
         "windows")
-            print_error "Por favor, instale Node.js manualmente de: https://nodejs.org/"
-            print_message "Após instalar, reinicie o terminal e execute este script novamente"
+            print_message "Detectado Windows - tentando instalação automática..."
+
+            # Tentar winget primeiro (mais comum no Windows 10/11)
+            if has_winget; then
+                print_message "winget detectado ✓"
+                if install_via_winget "OpenJS.NodeJS"; then
+                    print_message "Node.js instalado com sucesso via winget ✓"
+                    print_warning "IMPORTANTE: Feche e reabra o terminal para o Node.js estar disponível"
+                    return 0
+                else
+                    print_warning "Falha ao instalar via winget, tentando chocolatey..."
+                fi
+            fi
+
+            # Tentar chocolatey como fallback
+            if has_chocolatey; then
+                print_message "chocolatey detectado ✓"
+                if install_via_chocolatey "nodejs"; then
+                    print_message "Node.js instalado com sucesso via chocolatey ✓"
+                    print_warning "IMPORTANTE: Feche e reabra o terminal para o Node.js estar disponível"
+                    return 0
+                fi
+            fi
+
+            # Se nenhum gerenciador está disponível, instrução manual
+            print_error "Nenhum gerenciador de pacotes encontrado (winget/chocolatey)"
+            echo ""
+            print_message "Opção 1 - Instalar manualmente:"
+            echo "  1. Baixe Node.js de: https://nodejs.org/"
+            echo "  2. Execute o instalador"
+            echo "  3. Reinicie o terminal"
+            echo "  4. Execute este script novamente"
+            echo ""
+            print_message "Opção 2 - Instalar Chocolatey (gerenciador de pacotes):"
+            echo "  1. Abra PowerShell como Administrador"
+            echo "  2. Execute: Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
+            echo "  3. Depois execute este script novamente"
+            echo ""
             exit 1
             ;;
     esac
@@ -132,7 +237,7 @@ install_python() {
                 exit 1
             fi
             ;;
-        "linux")
+        "linux"|"wsl")
             if command_exists apt-get; then
                 sudo apt-get update
                 sudo apt-get install -y python3 python3-pip
@@ -148,8 +253,44 @@ install_python() {
             fi
             ;;
         "windows")
-            print_error "Por favor, instale Python manualmente de: https://www.python.org/"
-            print_message "Após instalar, reinicie o terminal e execute este script novamente"
+            print_message "Detectado Windows - tentando instalação automática..."
+
+            # Tentar winget primeiro (mais comum no Windows 10/11)
+            if has_winget; then
+                print_message "winget detectado ✓"
+                if install_via_winget "Python.Python.3.12"; then
+                    print_message "Python instalado com sucesso via winget ✓"
+                    print_warning "IMPORTANTE: Feche e reabra o terminal para o Python estar disponível"
+                    return 0
+                else
+                    print_warning "Falha ao instalar via winget, tentando chocolatey..."
+                fi
+            fi
+
+            # Tentar chocolatey como fallback
+            if has_chocolatey; then
+                print_message "chocolatey detectado ✓"
+                if install_via_chocolatey "python"; then
+                    print_message "Python instalado com sucesso via chocolatey ✓"
+                    print_warning "IMPORTANTE: Feche e reabra o terminal para o Python estar disponível"
+                    return 0
+                fi
+            fi
+
+            # Se nenhum gerenciador está disponível, instrução manual
+            print_error "Nenhum gerenciador de pacotes encontrado (winget/chocolatey)"
+            echo ""
+            print_message "Opção 1 - Instalar manualmente:"
+            echo "  1. Baixe Python de: https://www.python.org/"
+            echo "  2. Execute o instalador (marque 'Add Python to PATH')"
+            echo "  3. Reinicie o terminal"
+            echo "  4. Execute este script novamente"
+            echo ""
+            print_message "Opção 2 - Instalar Chocolatey (gerenciador de pacotes):"
+            echo "  1. Abra PowerShell como Administrador"
+            echo "  2. Execute: Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
+            echo "  3. Depois execute este script novamente"
+            echo ""
             exit 1
             ;;
     esac
@@ -236,6 +377,25 @@ get_claude_config_dir() {
         "linux")
             echo "$HOME/.config/claude"
             ;;
+        "wsl")
+            # No WSL, primeiro tentar o diretório Linux
+            if [ -d "$HOME/.config/claude" ]; then
+                echo "$HOME/.config/claude"
+            # Se não existir, tentar o diretório Windows via /mnt/c
+            elif [ -n "$USERPROFILE" ]; then
+                # Converter caminho Windows para WSL
+                local win_appdata=$(wslpath "$APPDATA" 2>/dev/null || echo "")
+                if [ -n "$win_appdata" ]; then
+                    echo "$win_appdata/Claude"
+                else
+                    # Fallback: usar diretório Linux
+                    echo "$HOME/.config/claude"
+                fi
+            else
+                # Fallback padrão
+                echo "$HOME/.config/claude"
+            fi
+            ;;
         "windows")
             echo "$APPDATA/Claude"
             ;;
@@ -315,14 +475,33 @@ generate_config() {
 
     # Substituir chave API OpenAI se fornecida
     if [ -n "$openai_api_key" ]; then
-        sed -i "s/your-openai-api-key-here/$openai_api_key/g" "$temp_file"
+        sed_inplace "s/your-openai-api-key-here/$openai_api_key/g" "$temp_file"
         print_message "Chave API OpenAI configurada ✓"
     fi
 
     # Substituir chave API Exa se fornecida
     if [ -n "$exa_api_key" ]; then
-        sed -i "s/your-exa-api-key-here/$exa_api_key/g" "$temp_file"
+        sed_inplace "s/your-exa-api-key-here/$exa_api_key/g" "$temp_file"
         print_message "Chave API Exa configurada ✓"
+    fi
+
+    # Expandir variável $HOME no caminho do uvx
+    # Se o arquivo contém $HOME, expande para o valor real
+    if grep -q "\$HOME" "$temp_file"; then
+        # Escapar o HOME para sed (substituir / por \/)
+        local escaped_home=$(echo "$HOME" | sed 's/\//\\\//g')
+        sed_inplace "s/\\\$HOME/$escaped_home/g" "$temp_file"
+        print_message "Variável \$HOME expandida: $HOME ✓"
+    fi
+
+    # Se ainda usa "uvx" genérico, substituir pelo caminho detectado
+    if grep -q "\"command\": \"uvx\"" "$temp_file"; then
+        local uvx_path=$(command -v uvx || echo "$HOME/.local/bin/uvx")
+        if [ -x "$uvx_path" ]; then
+            local escaped_path=$(echo "$uvx_path" | sed 's/\//\\\//g')
+            sed_inplace "s/\"command\": \"uvx\"/\"command\": \"$escaped_path\"/g" "$temp_file"
+            print_message "Caminho uvx configurado: $uvx_path ✓"
+        fi
     fi
 
     # Mover arquivo temporário para destino final
@@ -564,7 +743,9 @@ add_mcps_manually() {
     # Adicionar code-index se existir
     if grep -q "code-index" "$config_file"; then
         print_message "Adicionando code-index..."
-        claude mcp add --scope user --transport stdio code-index -- uvx code-index-mcp 2>/dev/null && \
+        # Usar caminho absoluto do uvx
+        local uvx_path=$(command -v uvx || echo "$HOME/.local/bin/uvx")
+        claude mcp add --scope user --transport stdio code-index -- "$uvx_path" code-index-mcp 2>/dev/null && \
             print_message "✓ code-index adicionado" || \
             print_warning "✗ Falha ao adicionar code-index"
     fi
@@ -730,6 +911,14 @@ show_completion() {
 # Função principal
 main() {
     print_header
+
+    # Detectar e mostrar sistema operacional
+    local detected_os=$(detect_os)
+    print_message "Sistema detectado: $detected_os"
+    if [[ "$detected_os" == "wsl" ]]; then
+        print_message "Executando no Windows Subsystem for Linux (WSL)"
+    fi
+    echo ""
 
     # Verificar dependências
     check_dependencies

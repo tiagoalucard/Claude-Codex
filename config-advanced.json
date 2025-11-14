@@ -10,6 +10,7 @@
       }
     },
     "shrimp-task-manager": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
@@ -30,7 +31,8 @@
       }
     },
     "code-index": {
-      "command": "uvx",
+      "type": "stdio",
+      "command": "$HOME/.local/bin/uvx",
       "args": [
         "code-index-mcp"
       ],
@@ -39,6 +41,7 @@
       }
     },
     "chrome-devtools": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "chrome-devtools-mcp@latest"
@@ -48,6 +51,7 @@
       }
     },
     "exa": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
