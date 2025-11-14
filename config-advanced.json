@@ -55,8 +55,8 @@
       "command": "npx",
       "args": [
         "-y",
-       "exa-mcp-server"
-       ],
+        "exa-mcp-server"
+      ],
       "env": {
         "EXA_API_KEY": "your-exa-api-key-here",
         "WORKING_DIR": ".claude"
