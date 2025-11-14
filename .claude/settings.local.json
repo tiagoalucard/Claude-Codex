@@ -9,7 +9,11 @@
       "Bash(sudo chmod:*)",
       "Bash(sudo tee:*)",
       "Bash(sudo apt update:*)",
-      "Bash(sudo apt install:*)"
+      "Bash(sudo apt install:*)",
+      "Bash(cat:*)",
+      "Bash(shellcheck:*)",
+      "Bash(grep:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
