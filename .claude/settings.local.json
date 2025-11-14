@@ -1,9 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(bash:*)",
-      "Bash(pkill:*)",
-      "Bash(git add:*)"
+      "Bash(git push:*)",
+      "Bash(gh auth login:*)",
+      "Bash(command -v:*)",
+      "Bash(curl:*)",
+      "Bash(sudo dd:*)",
+      "Bash(sudo chmod:*)",
+      "Bash(sudo tee:*)",
+      "Bash(sudo apt update:*)",
+      "Bash(sudo apt install:*)"
     ],
     "deny": [],
     "ask": []
